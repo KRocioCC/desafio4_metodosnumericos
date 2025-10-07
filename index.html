@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Mezcla de Canteras – Sistema 3x3 (con cuerpo 3D)</title>
+  <style>
+    :root{--bg:#0f172a;--ink:#e5e7eb;--muted:#9ca3af;--accent:#22c55e;--warn:#f59e0b}
+    *{box-sizing:border-box}
+    body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Inter,Arial,sans-serif;background:linear-gradient(180deg,#0b1220,#0f172a 40%);color:var(--ink)}
+    header{padding:20px 16px;text-align:center}
+    h1{font-size:clamp(22px,3.5vw,32px);margin:0 0 6px}
+    p.sub{margin:0;color:var(--muted)}
+    .wrap{max-width:1200px;margin:16px auto;padding:0 16px;display:grid;grid-template-columns:1fr;gap:16px}
+    .card{background:rgba(255,255,255,0.03);backdrop-filter:saturate(140%) blur(6px);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:16px}
+    h2{font-size:18px;margin:0 0 10px}
+    .grid{display:grid;gap:10px}
+    .cols-2{grid-template-columns:1fr 1fr}
+    .cols-3{grid-template-columns:repeat(3,1fr)}
+    .row{display:flex;gap:8px;align-items:center}
+    label{font-size:12px;color:var(--muted)}
+    input[type="number"]{width:100%;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.12);background:#0b1220;color:var(--ink)}
+    input[type="number"]::-webkit-outer-spin-button,input[type="number"]::-webkit-inner-spin-button{opacity:1}
+    .btns{display:flex;flex-wrap:wrap;gap:10px}
+    button{cursor:pointer;border:0;border-radius:12px;padding:10px 14px;background:#1f2937;color:#fff;transition:.15s transform ease, .15s background ease}
+    button:hover{transform:translateY(-1px);background:#243041}
+    button.primary{background:var(--accent);color:#052e16}
+    button.warn{background:var(--warn);color:#1f1300}
+    .tag{display:inline-block;padding:2px 8px;border-radius:999px;background:#1f2937;color:#e5e7eb;font-size:12px;margin-left:6px}
+    table{width:100%;border-collapse:collapse}
+    th,td{border-bottom:1px solid rgba(255,255,255,.08);padding:10px;text-align:right}
+    th{color:var(--muted);font-weight:500}
+    td.key{text-align:left;color:#cbd5e1}
+    pre{white-space:pre-wrap;background:#0b1220;border:1px solid rgba(255,255,255,.08);padding:12px;border-radius:12px;max-height:280px;overflow:auto}
+    .muted{color:var(--muted)}
+    canvas{width:100%;background:#0b1220;border:1px solid rgba(255,255,255,.08);border-radius:12px}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Mezcla de Canteras – Resolver Sistema 3×3</h1>
+    <p class="sub">Ingresa porcentajes <b>enteros</b> en A (se convierten a decimales automáticamente). Visualiza la solución en 2D y como <b>cuerpo 3D</b> (x₁, x₂, x₃).</p>
+  </header>
+
+  <div class="wrap">
+    <section class="card">
+      <h2>Datos de entrada <span class="tag">edítalos si quieres</span></h2>
+      <div class="grid cols-3">
+        <div>
+          <label>Matriz A (porcentajes en enteros)</label>
+          <div class="grid cols-3" id="matrixA"></div>
+        </div>
+        <div>
+          <label>Vector B (requerimientos)</label>
+          <div class="grid" id="vectorB"></div>
+        </div>
+        <div>
+          <label>Acciones</label>
+          <div class="btns">
+            <button class="primary" id="solveAll">Resolver (todo)</button>
+            <button id="solveInv">Por Inversa</button>
+            <button id="solveLU">Por LU</button>
+            <button id="solveJacobi">Jacobi</button>
+            <button id="solveSeidel">Gauss-Seidel</button>
+            <button class="warn" id="reset">Restablecer ejemplo</button>
+          </div>
+          <div class="row"><small>Variables: x₁ (cantera 1), x₂ (cantera 2), x₃ (cantera 3) — unidades: m³</small></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Resultados</h2>
+      <table>
+        <thead><tr><th class="key">Método</th><th>x₁</th><th>x₂</th><th>x₃</th><th>Iteraciones</th><th>‖Ax−B‖₂</th></tr></thead>
+        <tbody id="results"></tbody>
+      </table>
+      <p class="muted" style="margin-top:10px">‖Ax−B‖₂ es el error residual; mientras más pequeño, mejor.</p>
+    </section>
+
+    <section class="card">
+      <h2>Detalle de iteraciones</h2>
+      <pre id="log">—</pre>
+    </section>
+
+    <section class="card">
+      <h2>Gráficas 2D</h2>
+      <div class="grid cols-2">
+        <div>
+          <label>Solución actual (m³ por cantera)</label>
+          <canvas id="chartX" height="260"></canvas>
+        </div>
+        <div>
+          <label>Historial de residuo por iteración</label>
+          <canvas id="chartRes" height="260"></canvas>
+        </div>
+      </div>
+      <p class="muted" style="margin-top:10px">La izquierda muestra barras para x₁, x₂, x₃. La derecha grafica el residuo ‖Ax−B‖ por iteración (Jacobi/Seidel).</p>
+    </section>
+
+    <section class="card">
+      <h2>Cuerpo 3D (x₁, x₂, x₃)</h2>
+      <canvas id="chart3D" height="420"></canvas>
+      <p class="muted">Arrastra con el mouse para rotar. Se dibuja el <b>cuerpo rectangular</b> desde el origen hasta la solución, sus aristas y el vértice (x₁,x₂,x₃).</p>
+    </section>
+  </div>
+
+  <script>
+    // --------- Helpers ----------
+    const $ = (sel)=>document.querySelector(sel);
+    const $all = (sel)=>Array.from(document.querySelectorAll(sel));
+
+    function createNumberInput(value){
+      const inp = document.createElement('input');
+      inp.type = 'number';
+      inp.step = '1'; // % enteros
+      inp.value = value;
+      return inp;
+    }
+
+    function getA(){
+      // % enteros -> decimales
+      const inputs = $all('#matrixA input');
+      const A = [[],[],[]];
+      inputs.forEach((el,i)=>{A[Math.floor(i/3)][i%3] = parseFloat(el.value)/100});
+      return A;
+    }
+    function getB(){ return $all('#vectorB input').map(el=>parseFloat(el.value)); }
+
+    function matVec(A,x){return A.map(row=>row.reduce((s,v,j)=>s+v*x[j],0))}
+    function subVec(a,b){return a.map((v,i)=>v-b[i])}
+    function norm2(v){return Math.sqrt(v.reduce((s,x)=>s+x*x,0))}
+
+    // --------- Datos iniciales (en % enteros) ----------
+    const A0 = [
+      [52,20,25],
+      [30,50,20],
+      [18,30,55]
+    ];
+    const B0 = [4800,5810,5690];
+
+    function fillExample(){
+      const boxA = $('#matrixA'); boxA.innerHTML='';
+      A0.flat().forEach(v=>boxA.appendChild(createNumberInput(v)));
+      const boxB = $('#vectorB'); boxB.innerHTML='';
+      B0.forEach(v=>boxB.appendChild(createNumberInput(v)));
+      $('#results').innerHTML='';
+      $('#log').textContent='—';
+      latestX = [0,0,0];
+      drawBarChart(latestX);
+      drawLineChart([0]);
+      draw3D();
+    }
+
+    // --------- Métodos numéricos ---------
+    function gaussJordanInverse(A){
+      const n = A.length;
+      const M = A.map((row,i)=>[...row,...Array.from({length:n},(_,j)=>i===j?1:0)]);
+      for(let col=0; col<n; col++){
+        let pivot = col;
+        for(let r=col+1;r<n;r++) if(Math.abs(M[r][col])>Math.abs(M[pivot][col])) pivot=r;
+        if(Math.abs(M[pivot][col])<1e-12) throw new Error('A es singular o casi singular');
+        [M[col],M[pivot]]=[M[pivot],M[col]];
+        const piv = M[col][col];
+        for(let j=0;j<2*n;j++) M[col][j]/=piv;
+        for(let r=0;r<n;r++) if(r!==col){
+          const f = M[r][col];
+          for(let j=0;j<2*n;j++) M[r][j]-=f*M[col][j];
+        }
+      }
+      return M.map(row=>row.slice(n));
+    }
+    function solveByInverse(A,b){
+      const inv = gaussJordanInverse(A);
+      const x = b.map((_,i)=>inv[i].reduce((s,v,j)=>s+v*b[j],0));
+      return x;
+    }
+
+    function luDecompose(A){
+      const n=A.length; const L=Array.from({length:n},()=>Array(n).fill(0));
+      const U=Array.from({length:n},()=>Array(n).fill(0));
+      for(let i=0;i<n;i++) L[i][i]=1;
+      for(let j=0;j<n;j++){
+        for(let i=0;i<=j;i++){
+          let sum=0; for(let k=0;k<i;k++) sum+=L[i][k]*U[k][j];
+          U[i][j]=A[i][j]-sum;
+        }
+        for(let i=j+1;i<n;i++){
+          let sum=0; for(let k=0;k<j;k++) sum+=L[i][k]*U[k][j];
+          if(Math.abs(U[j][j])<1e-12) throw new Error('Pivote cero en LU.');
+          L[i][j]=(A[i][j]-sum)/U[j][j];
+        }
+      }
+      return {L,U};
+    }
+    function forwardSub(L,b){
+      const n=L.length, y=Array(n).fill(0);
+      for(let i=0;i<n;i++){
+        let sum=0; for(let k=0;k<i;k++) sum+=L[i][k]*y[k];
+        y[i]=(b[i]-sum)/L[i][i];
+      }
+      return y;
+    }
+    function backSub(U,y){
+      const n=U.length, x=Array(n).fill(0);
+      for(let i=n-1;i>=0;i--){
+        let sum=0; for(let k=i+1;k<n;k++) sum+=U[i][k]*x[k];
+        x[i]=(y[i]-sum)/U[i][i];
+      }
+      return x;
+    }
+    function solveLU(A,b){ const {L,U}=luDecompose(A); const y=forwardSub(L,b); return backSub(U,y); }
+
+    function iterate(A,b,{seidel=false,maxIter=200,tol=1e-6}={}){
+      const n=A.length; let x=Array(n).fill(0); let log=''; const hist=[];
+      for(let it=1; it<=maxIter; it++){
+        const xNew = [...x];
+        for(let i=0;i<n;i++){
+          let s=0;
+          for(let j=0;j<n;j++) if(j!==i) s+=A[i][j]*(seidel?xNew[j]:x[j]);
+          xNew[i]=(b[i]-s)/A[i][i];
+        }
+        const res = norm2(subVec(matVec(A,xNew), b)); hist.push(res);
+        log += `Iter ${it}: [${xNew.map(v=>v.toFixed(6)).join(', ')}], resid=${res.toExponential(2)}\n`;
+        if(norm2(subVec(xNew,x)) < tol) return {x:xNew, it, log, hist};
+        x = xNew;
+      }
+      return {x, it:200, log:log+"(máximo de iteraciones alcanzado)", hist};
+    }
+
+    // --------- Presentación en tabla + update gráficas ----------
+    let latestX = [0,0,0];
+    function rowHTML(method,x,it,res){
+      const cells = x? x.map(v=>v.toFixed(4)) : ['—','—','—'];
+      return `<tr><td class="key">${method}</td><td>${cells[0]}</td><td>${cells[1]}</td><td>${cells[2]}</td><td style="text-align:center">${it??'—'}</td><td>${res!==undefined?res.toExponential(3):'—'}</td></tr>`
+    }
+    function pushResult(name, A, b, x, it){
+      const res = norm2(subVec(matVec(A,x), b));
+      $('#results').insertAdjacentHTML('beforeend', rowHTML(name,x,it,res));
+      latestX = x.slice();
+      drawBarChart(latestX);
+      draw3D();
+    }
+
+    // --------- Gráficas 2D ----------
+    function clearCanvas(ctx){ const {canvas}=ctx; ctx.clearRect(0,0,canvas.width,canvas.height); }
+    function drawAxes2D(ctx,pad){
+      const w=ctx.canvas.width,h=ctx.canvas.height; ctx.strokeStyle="#475569"; ctx.lineWidth=1;
+      ctx.beginPath(); ctx.moveTo(pad,h-pad); ctx.lineTo(w-pad,h-pad); ctx.moveTo(pad,pad); ctx.lineTo(pad,h-pad); ctx.stroke();
+    }
+    function drawBarChart(vals){
+      const c=$('#chartX'); if(!c) return; const ctx=c.getContext('2d');
+      clearCanvas(ctx); const pad=28; drawAxes2D(ctx,pad);
+      const w=c.width,h=c.height; const bars=3; const bw=(w-2*pad)/(bars*1.4); const gap=bw*0.4;
+      const max=Math.max(...vals.map(v=>Math.abs(v)),1);
+      for(let i=0;i<bars;i++){
+        const x=pad+i*(bw+gap)+gap; const y0=h-pad; const hval=(vals[i]/max)*(h-2*pad);
+        ctx.fillStyle="#60a5fa"; ctx.fillRect(x, y0 - hval, bw, hval);
+        ctx.fillStyle="#cbd5e1"; ctx.font="12px system-ui"; ctx.textAlign="center";
+        ctx.fillText(`x${i+1}`, x+bw/2, h-8);
+      }
+    }
+    function drawLineChart(history){
+      const c=$('#chartRes'); if(!c) return; const ctx=c.getContext('2d');
+      clearCanvas(ctx); const pad=28; drawAxes2D(ctx,pad);
+      const w=c.width,h=c.height; const n=(history&&history.length)||1; const max=Math.max(...(history&&history.length?history:[0,1]));
+      ctx.strokeStyle="#34d399"; ctx.lineWidth=2; ctx.beginPath();
+      for(let i=0;i<n;i++){
+        const tx = pad + (i/(n-1||1))*(w-2*pad);
+        const ty = h - pad - ((history[i]||0)/max)*(h-2*pad);
+        if(i===0) ctx.moveTo(tx,ty); else ctx.lineTo(tx,ty);
+      }
+      ctx.stroke();
+      ctx.fillStyle="#86efac";
+      for(let i=0;i<n;i++){
+        const tx = pad + (i/(n-1||1))*(w-2*pad);
+        const ty = h - pad - ((history[i]||0)/max)*(h-2*pad);
+        ctx.beginPath(); ctx.arc(tx,ty,3,0,Math.PI*2); ctx.fill();
+      }
+    }
+
+    // --------- 3D (cuerpo rectangular) ----------
+    const c3d = document.getElementById('chart3D');
+    const ctx3d = c3d.getContext('2d');
+    let rotX = -0.5, rotY = 0.8, isDragging=false, lastX=0, lastY=0;
+
+    c3d.addEventListener('mousedown', e => {isDragging=true; lastX=e.clientX; lastY=e.clientY;});
+    window.addEventListener('mouseup', ()=> isDragging=false);
+    window.addEventListener('mousemove', e=>{
+      if(!isDragging) return;
+      const dx = e.clientX - lastX, dy = e.clientY - lastY;
+      lastX = e.clientX; lastY = e.clientY;
+      rotY += dx * 0.01;
+      rotX += dy * 0.01;
+      draw3D();
+    });
+
+    function rotateX([x,y,z], a){ const s=Math.sin(a), c=Math.cos(a); return [x, c*y - s*z, s*y + c*z]; }
+    function rotateY([x,y,z], a){ const s=Math.sin(a), c=Math.cos(a); return [c*x + s*z, y, -s*x + c*z]; }
+    function t3d(vec){ return rotateY(rotateX(vec, rotX), rotY); }
+    function project([x,y,z]){
+      const f = 600; const scale = f / (f - z);
+      const cx = c3d.width/2, cy = c3d.height/2;
+      return [cx + x*scale, cy - y*scale];
+    }
+
+    function drawPoly2D(points, fillStyle, strokeStyle, alpha=0.25){
+      ctx3d.globalAlpha = alpha;
+      ctx3d.fillStyle = fillStyle;
+      ctx3d.beginPath();
+      ctx3d.moveTo(points[0][0], points[0][1]);
+      for(let i=1;i<points.length;i++) ctx3d.lineTo(points[i][0], points[i][1]);
+      ctx3d.closePath(); ctx3d.fill();
+      ctx3d.globalAlpha = 1.0;
+      ctx3d.strokeStyle = strokeStyle; ctx3d.lineWidth = 1.2; ctx3d.stroke();
+    }
+
+    function drawEdge(a,b,stroke="#94a3b8"){
+      ctx3d.strokeStyle = stroke; ctx3d.lineWidth = 1.4;
+      ctx3d.beginPath(); ctx3d.moveTo(a[0],a[1]); ctx3d.lineTo(b[0],b[1]); ctx3d.stroke();
+    }
+
+    function draw3D(){
+      const w=c3d.width, h=c3d.height;
+      ctx3d.clearRect(0,0,w,h);
+
+      // Escala respecto a la solución
+      const maxVal = Math.max(1, ...latestX.map(v=>Math.abs(v)));
+      const axisLen = Math.min(w,h) * 0.35;
+      const k = axisLen / maxVal;
+
+      // Ejes
+      const O=[0,0,0], X=[k*maxVal,0,0], Y=[0,k*maxVal,0], Z=[0,0,k*maxVal];
+      const axes = [[O,X,"#ef4444","x₁"],[O,Y,"#22c55e","x₂"],[O,Z,"#3b82f6","x₃"]];
+      axes.forEach(([a,b,color,label])=>{
+        const A=project(t3d(a)), B=project(t3d(b));
+        drawEdge(A,B,color);
+        ctx3d.fillStyle = "#cbd5e1"; ctx3d.font="12px system-ui";
+        ctx3d.fillText(label, B[0]+6, B[1]-6);
+      });
+
+      // Vertices del cuerpo desde el origen hasta (x1,x2,x3)
+      const vx = latestX[0]*k, vy = latestX[1]*k, vz = latestX[2]*k;
+      const V = [
+        [0,  0,  0],     // 0: O
+        [vx, 0,  0],     // 1
+        [0,  vy, 0],     // 2
+        [0,  0,  vz],    // 3
+        [vx, vy, 0],     // 4
+        [vx, 0,  vz],    // 5
+        [0,  vy, vz],    // 6
+        [vx, vy, vz]     // 7: vértice solución
+      ];
+
+      // Caras del paralelepípedo (cada cara es una lista de índices en V)
+      const faces = [
+        { idx:[0,1,4,2], color:"#ef4444" }, // base XY en z=0
+        { idx:[0,1,5,3], color:"#22c55e" }, // base XZ en y=0
+        { idx:[0,2,6,3], color:"#3b82f6" }, // base YZ en x=0
+        { idx:[3,5,7,6], color:"#fb7185" }, // cara paralela XY en z=vz
+        { idx:[2,4,7,6], color:"#86efac" }, // cara paralela XZ en y=vy
+        { idx:[1,5,7,4], color:"#93c5fd" }  // cara paralela YZ en x=vx
+      ];
+
+      // Proyectar y ordenar por profundidad (pintado de atrás hacia adelante)
+      const rotVerts = V.map(p=>t3d(p));
+      const projVerts = rotVerts.map(p=>project(p));
+      const facesWithDepth = faces.map(f=>{
+        const avgZ = f.idx.reduce((s,i)=>s+rotVerts[i][2],0)/f.idx.length;
+        return { ...f, depth: avgZ };
+      }).sort((a,b)=>a.depth - b.depth);
+
+      // Dibujar caras semi transparentes
+      facesWithDepth.forEach(f=>{
+        const poly = f.idx.map(i=>projVerts[i]);
+        drawPoly2D(poly, f.color, "#0f172a", 0.18);
+      });
+
+      // Aristas principales (desde O a los ejes del vértice)
+      const edges = [
+        [0,1],[0,2],[0,3],[1,4],[2,4],[1,5],[3,5],[2,6],[3,6],[4,7],[5,7],[6,7]
+      ];
+      edges.forEach(([i,j])=> drawEdge(projVerts[i], projVerts[j], "#94a3b8"));
+
+      // Punto vértice solución y etiqueta
+      const P = projVerts[7];
+      ctx3d.fillStyle="#86efac"; ctx3d.strokeStyle="#065f46";
+      ctx3d.beginPath(); ctx3d.arc(P[0],P[1],4.5,0,Math.PI*2); ctx3d.fill(); ctx3d.stroke();
+      ctx3d.fillStyle="#e5e7eb"; ctx3d.font="12px system-ui";
+      ctx3d.fillText(`(${latestX.map(v=>v.toFixed(2)).join(", ")})`, P[0]+8, P[1]-6);
+    }
+
+    // --------- Eventos (resolver) ----------
+    $('#solveInv').addEventListener('click', ()=>{
+      try{
+        const A=getA(), b=getB();
+        const x=solveByInverse(A,b);
+        pushResult('Inversa (Gauss-Jordan)',A,b,x);
+        $('#log').textContent='—';
+        drawLineChart([norm2(subVec(matVec(A,x), b))]);
+      }catch(e){ alert(e.message) }
+    });
+
+    $('#solveLU').addEventListener('click', ()=>{
+      try{
+        const A=getA(), b=getB();
+        const x=solveLU(A,b);
+        pushResult('LU (Doolittle)',A,b,x);
+        $('#log').textContent='—';
+        drawLineChart([norm2(subVec(matVec(A,x), b))]);
+      }catch(e){ alert(e.message) }
+    });
+
+    $('#solveJacobi').addEventListener('click', ()=>{
+      const A=getA(), b=getB();
+      const {x,it,log,hist}=iterate(A,b,{seidel:false});
+      pushResult('Jacobi',A,b,x,it);
+      $('#log').textContent=log;
+      drawLineChart(hist);
+    });
+
+    $('#solveSeidel').addEventListener('click', ()=>{
+      const A=getA(), b=getB();
+      const {x,it,log,hist}=iterate(A,b,{seidel:true});
+      pushResult('Gauss-Seidel',A,b,x,it);
+      $('#log').textContent=log;
+      drawLineChart(hist);
+    });
+
+    $('#solveAll').addEventListener('click', ()=>{
+      $('#results').innerHTML='';
+      $('#solveInv').click();
+      $('#solveLU').click();
+      $('#solveJacobi').click();
+      $('#solveSeidel').click();
+    });
+
+    $('#reset').addEventListener('click', fillExample);
+
+    // --------- Init ----------
+    fillExample();
+  </script>
+</body>
+</html>
